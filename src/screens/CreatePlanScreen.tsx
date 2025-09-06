@@ -11,7 +11,7 @@ import {
 import { createPlan } from '../ApiConfig/api';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
-import { savePlan } from '../storage';
+import { loadPlan, savePlan } from '../storage';
 import { widthPercentageToDP as wp, heightPercentageToDP as hp } from 'react-native-responsive-screen';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CreatePlan'>;
@@ -21,27 +21,38 @@ export default function CreatePlanScreen({ navigation }: Props) {
   const [horizon, setHorizon] = useState<'today' | 'week'>('today');
   const [loading, setLoading] = useState(false);
 
-  const onGenerate = async () => {
-    if (!goal.trim()) {
-      Alert.alert('Validation', 'Please enter a goal.');
-      return;
-    }
-    setLoading(true);
-    try {
-      const plan = await createPlan(goal.trim(), horizon);
-      plan.tasks = plan.tasks.map(t => ({ ...t, completed: !!t.completed }));
-      await savePlan({ ...plan, createdAt: new Date().toISOString() });
+const onGenerate = async () => {
+  if (!goal.trim()) {
+    Alert.alert('Validation', 'Please enter a goal.');
+    return;
+  }
+  setLoading(true);
+  try {
+    // Try creating plan via API
+    const plan = await createPlan(goal.trim(), horizon);
+    plan.tasks = plan.tasks.map(t => ({ ...t, completed: !!t.completed }));
+    await savePlan({ ...plan, createdAt: new Date().toISOString() });
+    navigation.navigate('Plan');
+  } catch (err: any) {
+    console.error('API error:', err);
+
+    Alert.alert(
+      'API Error',
+      'Could not reach server. Loading your most recent saved plan.'
+    );
+
+    // Fallback: load the last saved plan from AsyncStorage
+    const savedPlan = await loadPlan();
+    if (savedPlan) {
       navigation.navigate('Plan');
-    } catch (err: any) {
-      console.error(err);
-      Alert.alert(
-        'Error',
-        err?.response?.data?.error ?? err.message ?? 'Failed to create plan'
-      );
-    } finally {
-      setLoading(false);
+    } else {
+      Alert.alert('No Plan', 'No saved plan is available.');
     }
-  };
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   return (
     <View style={styles.container}>
